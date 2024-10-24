@@ -31,6 +31,11 @@ func (f *Futex) Wait(cmp uint32) bool {
 	return false
 }
 
+// Like Wait, but times out after the number of nanoseconds in timeout.
+func (f *Futex) WaitUntil(cmp uint32, timeout uint64) {
+	tinygo_futex_wait_timeout((*uint32)(unsafe.Pointer(&f.Uint32)), cmp, timeout)
+}
+
 // Wake a single waiter.
 func (f *Futex) Wake() {
 	tinygo_futex_wake((*uint32)(unsafe.Pointer(&f.Uint32)), 1)
@@ -44,6 +49,9 @@ func (f *Futex) WakeAll() {
 
 //export tinygo_futex_wait
 func tinygo_futex_wait(addr *uint32, cmp uint32)
+
+//export tinygo_futex_wait_timeout
+func tinygo_futex_wait_timeout(addr *uint32, cmp uint32, timeout uint64)
 
 //export tinygo_futex_wake
 func tinygo_futex_wake(addr *uint32, num uint32)
