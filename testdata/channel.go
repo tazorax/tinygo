@@ -3,6 +3,7 @@ package main
 import (
 	"runtime"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -70,11 +71,13 @@ func main() {
 	// Test multi-receiver.
 	ch = make(chan int)
 	wg.Add(3)
-	go fastreceiver(ch)
-	go fastreceiver(ch)
-	go fastreceiver(ch)
+	var result atomic.Uint32
+	go fastreceiveradd(ch, &result)
+	go fastreceiveradd(ch, &result)
+	go fastreceiveradd(ch, &result)
 	slowsender(ch)
 	wg.Wait()
+	println("sum of sums:", result.Load())
 
 	// Test iterator style channel.
 	ch = make(chan int)
@@ -287,6 +290,16 @@ func fastreceiver(ch chan int) {
 		sum += n
 	}
 	println("sum:", sum)
+	wg.Done()
+}
+
+func fastreceiveradd(ch chan int, result *atomic.Uint32) {
+	sum := 0
+	for i := 0; i < 2; i++ {
+		n := <-ch
+		sum += n
+	}
+	result.Add(uint32(sum))
 	wg.Done()
 }
 
