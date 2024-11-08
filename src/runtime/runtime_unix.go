@@ -93,6 +93,8 @@ func main(argc int32, argv *unsafe.Pointer) int {
 	stackTop = getCurrentStackPointer()
 	runMain()
 
+	sleepTicks(nanosecondsToTicks(1e9))
+
 	// For libc compatibility.
 	return 0
 }

@@ -52,7 +52,13 @@ func mainCRTStartup() int {
 	stackTop = getCurrentStackPointer()
 	runMain()
 
-	// For libc compatibility.
+	// Exit via exit(0) instead of returning.
+	// This matches mingw-w64-crt/crt/crtexe.c, which exits using exit(0)
+	// instead of returning the return value.
+	libc_exit(0)
+
+	// Unreachable, since we're already exited. But we need to return something
+	// to make this valid Go code.
 	return 0
 }
 
@@ -92,7 +98,9 @@ func os_runtime_args() []string {
 }
 
 func putchar(c byte) {
-	libc_putchar(int(c))
+	if libc_putchar(int(c)) < 0 {
+		libc_exit(42)
+	}
 }
 
 var heapSize uintptr = 128 * 1024 // small amount to start

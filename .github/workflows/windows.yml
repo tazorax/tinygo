@@ -23,26 +23,30 @@ jobs:
           minimum-size: 8GB
           maximum-size: 24GB
           disk-root: "C:"
-      - uses: brechtm/setup-scoop@v2
-        with:
-          scoop_update: 'false'
-      - name: Install Dependencies
-        shell: bash
-        run: |
-          scoop install ninja binaryen
+      #- uses: brechtm/setup-scoop@v2
+      #  with:
+      #    scoop_update: 'false'
+      #- name: Install Dependencies
+      #  shell: bash
+      #  run: |
+      #    scoop install ninja binaryen
       - name: Checkout
         uses: actions/checkout@v4
-        with:
-          submodules: true
+      - name: submodules
+        shell: bash
+        run: git submodule update --init lib/mingw-w64
       - name: Extract TinyGo version
         id: version
         shell: bash
         run: ./.github/workflows/tinygo-extract-version.sh | tee -a "$GITHUB_OUTPUT"
-      - name: Install Go
-        uses: actions/setup-go@v5
-        with:
-          go-version: '1.23'
-          cache: true
+      - name: command
+        shell: bash
+        run: go env
+      #- name: Install Go
+      #  uses: actions/setup-go@v5
+      #  with:
+      #    go-version: '1.23'
+      #    cache: true
       - name: Restore cached LLVM source
         uses: actions/cache/restore@v4
         id: cache-llvm-source
@@ -91,6 +95,25 @@ jobs:
         with:
           key: ${{ steps.cache-llvm-build.outputs.cache-primary-key }}
           path: llvm-build
+      - name: Restore Go cache
+        uses: actions/cache/restore@v4
+        with:
+          key: go-cache-v2
+          path: |
+            C:/Users/runneradmin/AppData/Local/go-build
+            C:/Users/runneradmin/go/pkg/mod
+      - name: Test TinyGo
+        shell: bash
+        run: make test GOTESTFLAGS="-short -run=TestBuild -v"
+      - name: Save Go cache
+        uses: actions/cache/save@v4
+        with:
+          key: go-cache-v2
+          path: |
+            C:/Users/runneradmin/AppData/Local/go-build
+            C:/Users/runneradmin/go/pkg/mod
+      - name: exit
+        run: command-does-not-exist
       - name: Cache wasi-libc sysroot
         uses: actions/cache@v4
         id: cache-wasi-libc
@@ -105,9 +128,6 @@ jobs:
           scoop install wasmtime@14.0.4
       - name: make gen-device
         run: make -j3 gen-device
-      - name: Test TinyGo
-        shell: bash
-        run: make test GOTESTFLAGS="-short"
       - name: Build TinyGo release tarball
         shell: bash
         run: make build/release -j4

@@ -7,6 +7,7 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"errors"
 	"flag"
 	"io"
@@ -15,6 +16,7 @@ import (
 	"reflect"
 	"regexp"
 	"runtime"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -27,7 +29,6 @@ import (
 	"github.com/tetratelabs/wazero/sys"
 	"github.com/tinygo-org/tinygo/builder"
 	"github.com/tinygo-org/tinygo/compileopts"
-	"github.com/tinygo-org/tinygo/diagnostics"
 	"github.com/tinygo-org/tinygo/goenv"
 )
 
@@ -114,10 +115,15 @@ func TestBuild(t *testing.T) {
 		return
 	}
 
-	t.Run("Host", func(t *testing.T) {
-		t.Parallel()
-		runPlatTests(optionsFromTarget("", sema), tests, t)
+	t.Run("Debugging", func(t *testing.T) {
+		for i := 0; i < 5; i++ {
+			t.Run(strconv.Itoa(i), func(t *testing.T) {
+				options := optionsFromTarget("", sema)
+				runTest("alias.go", options, t, nil, nil)
+			})
+		}
 	})
+	return
 
 	// Test a few build options.
 	t.Run("build-options", func(t *testing.T) {
@@ -420,21 +426,66 @@ func runTestWithConfig(name string, t *testing.T, options compileopts.Options, c
 
 	// Build the test binary.
 	stdout := &bytes.Buffer{}
-	_, err = buildAndRun(pkgName, config, stdout, cmdArgs, environmentVars, time.Minute, func(cmd *exec.Cmd, result builder.BuildResult) error {
-		return cmd.Run()
-	})
+	_, fileExt := config.EmulatorFormat()
+	tmpdir := t.TempDir()
+	result, err := builder.Build(pkgName, fileExt, tmpdir, config)
 	if err != nil {
-		w := &bytes.Buffer{}
-		diagnostics.CreateDiagnostics(err).WriteTo(w, "")
-		for _, line := range strings.Split(strings.TrimRight(w.String(), "\n"), "\n") {
-			t.Log(line)
-		}
-		if stdout.Len() != 0 {
-			t.Logf("output:\n%s", stdout.String())
-		}
-		t.Fail()
-		return
+		t.Fatal("build failed:", err)
 	}
+
+	data, err := os.ReadFile(result.Executable)
+	if err != nil {
+		t.Fatal("failed to read executable:", err)
+	}
+	hash := sha256.Sum256(data)
+	t.Logf("executable hash and size: %d %x", len(data), hash)
+
+	for i := 0; i < 100; i++ {
+		i := i
+		t.Run(strconv.Itoa(i), func(t *testing.T) {
+			t.Parallel()
+			stdout := &bytes.Buffer{}
+			cmd := exec.Command(result.Executable)
+			cmd.Stdout = stdout
+			cmd.Stderr = stdout
+			err := cmd.Run()
+			if err != nil {
+				t.Log("run error:", err)
+			}
+			checkOutput(t, expectedOutputPath, stdout.Bytes())
+		})
+	}
+	return
+
+	//_, err = buildAndRun(pkgName, config, stdout, cmdArgs, environmentVars, time.Minute, func(cmd *exec.Cmd, result builder.BuildResult) error {
+	//	data, err := os.ReadFile(result.Executable)
+	//	if err != nil {
+	//		t.Fatal("failed to read executable:", err)
+	//	}
+	//	hash := sha256.Sum256(data)
+	//	t.Logf("executable hash and size: %d %x", len(data), hash)
+
+	//	t.Log("command:", cmd)
+	//	err = cmd.Run()
+	//	if err == nil {
+	//		t.Log("  error is nil!")
+	//	} else {
+	//		t.Log("  error:", err)
+	//	}
+	//	return err
+	//})
+	//if err != nil {
+	//	w := &bytes.Buffer{}
+	//	diagnostics.CreateDiagnostics(err).WriteTo(w, "")
+	//	for _, line := range strings.Split(strings.TrimRight(w.String(), "\n"), "\n") {
+	//		t.Log(line)
+	//	}
+	//	if stdout.Len() != 0 {
+	//		t.Logf("output:\n%s", stdout.String())
+	//	}
+	//	t.Fail()
+	//	return
+	//}
 
 	actual := stdout.Bytes()
 	if config.EmulatorName() == "simavr" {
